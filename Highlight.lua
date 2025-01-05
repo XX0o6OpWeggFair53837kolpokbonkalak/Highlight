@@ -12,11 +12,22 @@ local Storage = Instance.new("Folder")
 Storage.Parent = CoreGui
 Storage.Name = "Highlight_Storage"
 
+local function WaitForCharacter(plr, timeout)
+    timeout = timeout or 10
+    local startTime = tick()
+    while not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") do
+        if tick() - startTime > timeout then
+            return false
+        end
+        task.wait(0.1)
+    end
+    return true
+end
+
 local function CreateBillboard(plr)
     local Billboard = Instance.new("BillboardGui")
     Billboard.Name = plr.Name .. "_Billboard"
-    Billboard.Adornee = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-    Billboard.Size = UDim2.new(3, 0, 0.8, 0)
+    Billboard.Size = UDim2.new(3, 0, 1, 0)
     Billboard.StudsOffset = Vector3.new(0, 3, 0)
     Billboard.AlwaysOnTop = true
     Billboard.Parent = Storage
@@ -29,6 +40,7 @@ local function CreateBillboard(plr)
     NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     NameLabel.BackgroundTransparency = 1
     NameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    NameLabel.Position = UDim2.new(0, 0, 0, 0)
     NameLabel.Parent = Billboard
 
     local HealthLabel = Instance.new("TextLabel")
@@ -47,19 +59,25 @@ local function CreateBillboard(plr)
         local humanoid = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then
             HealthLabel.Text = "HP: " .. math.floor(humanoid.Health)
+        else
+            HealthLabel.Text = "HP: N/A"
         end
     end
 
-    connections[plr] = {
-        CharacterAdded = plr.CharacterAdded:Connect(function(char)
+    connections[plr] = connections[plr] or {}
+    connections[plr].CharacterAdded = plr.CharacterAdded:Connect(function(char)
+        if WaitForCharacter(plr) then
             Billboard.Adornee = char:FindFirstChild("HumanoidRootPart")
             UpdateHealth()
-        end),
-        HealthChanged = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") and
-            plr.Character:FindFirstChildOfClass("Humanoid").HealthChanged:Connect(UpdateHealth)
-    }
+        end
+    end)
+    connections[plr].HealthChanged = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") and
+        plr.Character:FindFirstChildOfClass("Humanoid").HealthChanged:Connect(UpdateHealth)
 
-    UpdateHealth()
+    if plr.Character and WaitForCharacter(plr) then
+        Billboard.Adornee = plr.Character:FindFirstChild("HumanoidRootPart")
+        UpdateHealth()
+    end
 end
 
 local function Highlight(plr)
@@ -72,36 +90,37 @@ local function Highlight(plr)
     Highlight.OutlineTransparency = OutlineTransparency
     Highlight.Parent = Storage
 
-    local plrchar = plr.Character
-    if plrchar then
-        Highlight.Adornee = plrchar
-    end
-
-    if not connections[plr] then
-        connections[plr] = {}
-    end
-
+    connections[plr] = connections[plr] or {}
     connections[plr].CharacterAdded = plr.CharacterAdded:Connect(function(char)
-        Highlight.Adornee = char
+        if WaitForCharacter(plr) then
+            Highlight.Adornee = char
+        end
     end)
+
+    if plr.Character and WaitForCharacter(plr) then
+        Highlight.Adornee = plr.Character
+    end
 
     CreateBillboard(plr)
 end
 
-Players.PlayerAdded:Connect(Highlight)
-for _, v in ipairs(Players:GetPlayers()) do
-    Highlight(v)
+Players.PlayerAdded:Connect(function(plr)
+    Highlight(plr)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+    Highlight(player)
 end
 
 Players.PlayerRemoving:Connect(function(plr)
-    if Storage:FindFirstChild(plr.Name) then
-        Storage[plr.Name]:Destroy()
-    end
     if connections[plr] then
         for _, conn in pairs(connections[plr]) do
             conn:Disconnect()
         end
         connections[plr] = nil
+    end
+    if Storage:FindFirstChild(plr.Name) then
+        Storage[plr.Name]:Destroy()
     end
     if Storage:FindFirstChild(plr.Name .. "_Billboard") then
         Storage[plr.Name .. "_Billboard"]:Destroy()
